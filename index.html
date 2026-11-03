@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="Interactive electoral geography and polling snapshot for New Zealand's 2026 general election, as at 3 November 2026." />
+<title>New Zealand 2026 General Election | Electoral Geography</title>
+<script>
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('nz-theme'); } catch (e) {}
+    if (t !== 'dark' && t !== 'light') {
+      t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    }
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+
+<link rel="preconnect" href="https://unpkg.com" />
+<link rel="preconnect" href="https://services2.arcgis.com" />
+<link rel="preconnect" href="https://server.arcgisonline.com" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<style>
+  :root {
+    color-scheme: light;
+    --ink: #172a38;
+    --muted: #657887;
+    --paper: #f4f7f8;
+    --panel: #ffffff;
+    --line: #dce5e9;
+    --navy: #183448;
+    --head: #183448;
+    --eyebrow: #62808c;
+    --chip: #edf2f4;
+    --chip-text: #607482;
+    --active-bg: #183448;
+    --active-text: #ffffff;
+    --soft: #fbfcfc;
+    --track: #edf1f3;
+    --tag-bg: #eef4f5;
+    --tag-text: #54717d;
+    --note-bg: #f4f7f8;
+    --note-line: #94adb6;
+    --note-text: #647985;
+    --label: #354c5b;
+    --strong: #314b5b;
+    --body2: #526977;
+    --meta: #6b7e89;
+    --meta2: #7c8e98;
+    --link: #26707b;
+    --link-hover: #164c56;
+    --link-line: #d8e6e9;
+    --sea: #e8eff1;
+    --stamp-line: #cddbe0;
+    --teal: #237b83;
+    --ochre: #c58a38;
+    --sw-general: rgba(35,123,131,.24);
+    --sw-maori: rgba(197,138,56,.30);
+    --shadow: 0 12px 32px rgba(24, 52, 72, .08);
+    --focus: rgba(35,123,131,.14);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ink: #e3ecf0;
+    --muted: #8fa4b0;
+    --paper: #0d171e;
+    --panel: #15232c;
+    --line: #25353f;
+    --navy: #e3ecf0;
+    --head: #eef4f7;
+    --eyebrow: #7fa3b0;
+    --chip: #0f1b23;
+    --chip-text: #93a9b5;
+    --active-bg: #2a8f98;
+    --active-text: #ffffff;
+    --soft: #101d25;
+    --track: #223440;
+    --tag-bg: #1d2f3a;
+    --tag-text: #9ec0cb;
+    --note-bg: #111f28;
+    --note-line: #4f6c79;
+    --note-text: #93a9b5;
+    --label: #c3d3db;
+    --strong: #cfdde4;
+    --body2: #a3b7c2;
+    --meta: #8397a3;
+    --meta2: #7a8f9b;
+    --link: #62bcc6;
+    --link-hover: #9ae0e8;
+    --link-line: #25353f;
+    --sea: #0f1a21;
+    --stamp-line: #2b3d49;
+    --teal: #2fa3ad;
+    --ochre: #d9a050;
+    --sw-general: rgba(47,163,173,.35);
+    --sw-maori: rgba(217,160,80,.40);
+    --shadow: 0 12px 32px rgba(0, 0, 0, .35);
+    --focus: rgba(98,188,198,.18);
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    transition: background .25s ease, color .25s ease;
+  }
+  .page { max-width: 1680px; margin: 0 auto; padding: 24px 28px 28px; }
+  .masthead { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; margin-bottom:18px; }
+  .eyebrow { text-transform:uppercase; letter-spacing:.16em; font-size:10px; font-weight:800; color:var(--eyebrow); }
+  h1 { margin:7px 0 7px; font-size:clamp(25px,3vw,38px); letter-spacing:-.04em; line-height:1.05; color:var(--head); }
+  .subtitle { color:var(--muted); font-size:13px; line-height:1.55; max-width:760px; }
+  .subtitle strong { color:var(--strong); }
+  .masthead-right { display:flex; flex-direction:column; align-items:flex-end; gap:9px; flex:0 0 auto; }
+  .date-stamp { border:1px solid var(--stamp-line); border-radius:10px; padding:10px 13px; color:var(--head); background:var(--panel); text-align:right; box-shadow:0 3px 10px rgba(24,52,72,.03); }
+  .date-stamp strong { display:block; font-size:12px; letter-spacing:.08em; }
+  .date-stamp span { display:block; color:var(--muted); font-size:10px; margin-top:3px; }
+  .theme-toggle { display:inline-flex; align-items:center; gap:7px; border:1px solid var(--line); background:var(--panel); color:var(--head); border-radius:999px; padding:7px 13px 7px 10px; font:inherit; font-size:11px; font-weight:750; cursor:pointer; transition:.18s ease; box-shadow:0 3px 10px rgba(24,52,72,.04); }
+  .theme-toggle:hover { border-color:var(--teal); }
+  .theme-toggle:focus-visible, .layer-switch button:focus-visible, .tool-button:focus-visible { outline:2px solid var(--teal); outline-offset:2px; }
+  .theme-toggle .ico { font-size:14px; line-height:1; }
+  .layout { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(340px,.9fr); gap:18px; align-items:start; }
+  .map-card, .panel-card { background:var(--panel); border:1px solid var(--line); border-radius:15px; overflow:hidden; box-shadow:var(--shadow); transition:background .25s ease, border-color .25s ease; }
+  .map-card { display:flex; flex-direction:column; position:sticky; top:16px; }
+  .map-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; padding:13px 15px; border-bottom:1px solid var(--line); }
+  .layer-switch { display:flex; align-items:center; gap:5px; background:var(--chip); padding:4px; border-radius:9px; }
+  .layer-switch button, .tool-button { border:0; cursor:pointer; border-radius:7px; padding:8px 11px; background:transparent; color:var(--chip-text); font-size:11px; font-weight:750; transition:.18s ease; font-family:inherit; }
+  .layer-switch button.active { background:var(--active-bg); color:var(--active-text); box-shadow:0 2px 6px rgba(24,52,72,.18); }
+  .tool-button { border:1px solid var(--line); background:var(--panel); color:var(--head); }
+  .tool-button:hover, .layer-switch button:hover { filter:brightness(.97); }
+  :root[data-theme="dark"] .tool-button:hover, :root[data-theme="dark"] .layer-switch button:hover { filter:brightness(1.15); }
+  .toolbar-right { display:flex; flex-wrap:wrap; align-items:center; gap:7px; }
+  .search-wrap { position:relative; }
+  .search-wrap input { width:min(245px,48vw); padding:8px 10px 8px 30px; border:1px solid var(--line); background:var(--soft); border-radius:8px; font:inherit; font-size:11px; color:var(--ink); outline:none; }
+  .search-wrap input::placeholder { color:var(--meta2); }
+  .search-wrap input:focus { border-color:var(--teal); box-shadow:0 0 0 3px var(--focus); }
+  .search-icon { position:absolute; left:10px; top:7px; color:var(--meta2); font-size:14px; pointer-events:none; }
+  #map { position:relative; height:540px; background:var(--sea); }
+  .map-bottom { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:10px 14px; color:var(--muted); font-size:10px; border-top:1px solid var(--line); }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+  .legend-item { display:flex; align-items:center; gap:6px; }
+  .swatch { width:13px; height:13px; border-radius:3px; border:1px solid rgba(127,150,163,.55); display:inline-block; }
+  .swatch.general { background:var(--sw-general); }
+  .swatch.maori { background:var(--sw-maori); }
+  .status { font-size:10px; color:var(--muted); }
+  .side { display:flex; flex-direction:column; gap:14px; }
+  .panel-card { padding:16px 17px; }
+  .section-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
+  .section-title { color:var(--head); font-size:13px; font-weight:850; letter-spacing:.01em; }
+  .tag { font-size:9px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; padding:5px 7px; border-radius:5px; background:var(--tag-bg); color:var(--tag-text); white-space:nowrap; }
+  .poll-source { font-size:10px; color:var(--muted); margin-top:-6px; margin-bottom:12px; }
+  .poll-row { display:grid; grid-template-columns:90px 1fr 42px; gap:9px; align-items:center; margin:10px 0; }
+  .party-name { font-size:11px; font-weight:750; color:var(--label); white-space:nowrap; }
+  .track { height:10px; border-radius:20px; background:var(--track); overflow:hidden; }
+  .fill { height:100%; border-radius:20px; min-width:2px; }
+  .poll-value { text-align:right; font-size:11px; font-weight:800; color:var(--head); font-variant-numeric:tabular-nums; }
+  .poll-note { margin-top:12px; padding:10px; border-left:3px solid var(--note-line); background:var(--note-bg); color:var(--note-text); font-size:10px; line-height:1.48; }
+  .poll-note strong { color:var(--strong); }
+  .metrics { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+  .metric { border:1px solid var(--line); border-radius:9px; padding:11px 12px; background:var(--soft); }
+  .metric-value { color:var(--head); font-size:22px; font-weight:850; letter-spacing:-.04em; line-height:1.1; font-variant-numeric:tabular-nums; }
+  .metric-label { color:var(--muted); font-size:9px; line-height:1.4; margin-top:5px; }
+  .metric-note { font-size:9px; color:var(--meta2); margin-top:3px; }
+  .roll-title { font-size:10px; font-weight:800; color:var(--label); margin-top:14px; }
+  .roll-bar { display:flex; width:100%; height:12px; border-radius:20px; overflow:hidden; margin:9px 0 7px; background:var(--track); }
+  .roll-bar .maori { background:var(--ochre); }
+  .roll-bar .general { background:var(--teal); }
+  .roll-legend { display:flex; justify-content:space-between; font-size:9px; color:var(--muted); gap:10px; }
+  .roll-legend b { color:var(--strong); }
+  .timeline { list-style:none; padding:0; margin:0; }
+  .timeline li { position:relative; display:grid; grid-template-columns:61px 1fr; gap:10px; padding:0 0 11px 0; font-size:10px; line-height:1.45; color:var(--body2); }
+  .timeline li:last-child { padding-bottom:0; }
+  .timeline .date { color:var(--head); font-weight:850; font-variant-numeric:tabular-nums; }
+  .timeline strong { color:var(--strong); }
+  .notes-text { font-size:10px; line-height:1.55; color:var(--body2); margin-bottom:10px; }
+  .notes-text strong { color:var(--strong); }
+  .sources { display:grid; gap:7px; }
+  .sources a { color:var(--link); font-size:10px; text-decoration:none; border-bottom:1px solid var(--link-line); padding-bottom:6px; }
+  .sources a:last-child { border-bottom:0; padding-bottom:0; }
+  .sources a:hover { color:var(--link-hover); text-decoration:underline; }
+  .methodology { color:var(--meta); font-size:9px; line-height:1.48; margin:10px 0 0; }
+  .loading-overlay { position:absolute; inset:0; z-index:500; display:flex; align-items:center; justify-content:center; background:var(--sea); color:var(--head); text-align:center; padding:24px; font-size:13px; font-weight:700; opacity:.96; }
+  .loading-overlay small { display:block; margin-top:7px; color:var(--muted); font-size:10px; font-weight:500; }
+  .leaflet-container { font-family:inherit; background:var(--sea); }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background:var(--panel); color:var(--ink); }
+  .leaflet-popup-content-wrapper { border-radius:9px; box-shadow:0 5px 20px rgba(0,0,0,.2); }
+  .leaflet-popup-content { margin:12px 14px; font-size:11px; line-height:1.5; }
+  .leaflet-container a.leaflet-popup-close-button { color:var(--muted); }
+  .leaflet-tooltip { background:var(--panel); color:var(--ink); border-color:var(--line); box-shadow:0 3px 10px rgba(0,0,0,.18); }
+  .leaflet-tooltip-top:before { border-top-color:var(--line); }
+  .leaflet-tooltip-bottom:before { border-bottom-color:var(--line); }
+  .leaflet-tooltip-left:before { border-left-color:var(--line); }
+  .leaflet-tooltip-right:before { border-right-color:var(--line); }
+  .leaflet-bar a { background:var(--panel); color:var(--head); border-bottom-color:var(--line); }
+  .leaflet-bar a:hover { background:var(--chip); color:var(--head); }
+  .leaflet-bar { border:1px solid var(--line); box-shadow:0 2px 8px rgba(0,0,0,.15); }
+  .popup-title { color:var(--head); font-weight:850; font-size:13px; margin-bottom:3px; }
+  .popup-type { color:var(--muted); font-size:10px; }
+  .popup-note { margin-top:7px; color:var(--muted); font-size:10px; }
+  .leaflet-control-attribution { font-size:8px !important; background:rgba(255,255,255,.75) !important; color:#46585f !important; }
+  :root[data-theme="dark"] .leaflet-control-attribution { background:rgba(13,23,30,.78) !important; color:#9db1bc !important; }
+  :root[data-theme="dark"] .leaflet-control-attribution a { color:#7fc9d2 !important; }
+  .footnote { margin-top:15px; text-align:center; color:var(--meta2); font-size:9px; line-height:1.5; }
+  @media (max-width:1050px) {
+    .layout { grid-template-columns:1fr; }
+    .map-card { position:static; }
+    #map { height:500px; }
+    .side { display:grid; grid-template-columns:1fr 1fr; align-items:start; }
+    .side .full { grid-column:1 / -1; }
+  }
+  @media (max-width:650px) {
+    .page { padding:15px 12px 22px; }
+    .masthead { display:block; }
+    .masthead-right { flex-direction:row; align-items:center; flex-wrap:wrap; margin-top:11px; }
+    .date-stamp { display:inline-block; text-align:left; }
+    .side { display:flex; }
+    #map { height:440px; }
+    .map-toolbar { align-items:flex-start; }
+    .toolbar-right { width:100%; justify-content:space-between; }
+    .search-wrap { flex:1; }
+    .search-wrap input { width:100%; }
+    .poll-row { grid-template-columns:82px 1fr 38px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="masthead">
+    <div>
+      <div class="eyebrow">Electoral geography · Aotearoa New Zealand</div>
+      <h1>2026 General Election</h1>
+      <div class="subtitle">A geographic reference map of parliamentary electorates, paired with the latest national polling and participation indicators available on <strong>3 November 2026</strong>.</div>
+    </div>
+    <div class="masthead-right">
+      <div class="date-stamp"><strong>DATA SNAPSHOT</strong><span>03 NOVEMBER 2026 · PRE-ELECTION</span></div>
+      <button id="themeToggle" class="theme-toggle" type="button" aria-label="Toggle dark mode"><span class="ico" id="themeIcon">☾</span><span id="themeLabel">Dark mode</span></button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="map-card" aria-label="Interactive electorate map">
+      <div class="map-toolbar">
+        <div class="layer-switch" role="group" aria-label="Electoral roll boundary layer">
+          <button id="generalBtn" class="active" type="button" aria-pressed="true">General roll · 64</button>
+          <button id="maoriBtn" type="button" aria-pressed="false">Māori roll · 7</button>
+        </div>
+        <div class="toolbar-right">
+          <div class="search-wrap">
+            <span class="search-icon">⌕</span>
+            <input id="searchElectorate" type="search" list="electorateOptions" placeholder="Find an electorate…" aria-label="Find an electorate" />
+            <datalist id="electorateOptions"></datalist>
+          </div>
+          <button id="resetBtn" class="tool-button" type="button">Reset view</button>
+        </div>
+      </div>
+      <div id="map">
+        <div id="loading" class="loading-overlay">Loading official 2026 electorate boundaries…<small>Connecting to Stats NZ / Representation Commission boundary services</small></div>
+      </div>
+      <div class="map-bottom">
+        <div class="legend" id="mapLegend">
+          <span class="legend-item"><i class="swatch general"></i> General electorates</span>
+          <span class="legend-item"><i class="swatch maori"></i> Māori electorates (switch layer)</span>
+        </div>
+        <span class="status" id="mapStatus">Boundary layer loading…</span>
+      </div>
+    </section>
+
+    <aside class="side" aria-label="Election indicators">
+      <section class="panel-card">
+        <div class="section-head">
+          <div class="section-title">National party vote intention</div>
+          <span class="tag">Latest poll</span>
+        </div>
+        <div class="poll-source">1News – Verian final poll · Fieldwork: 29 Oct–2 Nov 2026</div>
+        <div id="pollBars">
+          <div class="poll-row"><span class="party-name">National</span><div class="track"><div class="fill" style="width:84.3%;background:#2465a8"></div></div><span class="poll-value">29.5%</span></div>
+          <div class="poll-row"><span class="party-name">Labour</span><div class="track"><div class="fill" style="width:82.3%;background:#c94c51"></div></div><span class="poll-value">28.8%</span></div>
+          <div class="poll-row"><span class="party-name">Greens</span><div class="track"><div class="fill" style="width:46.9%;background:#3a8a61"></div></div><span class="poll-value">16.4%</span></div>
+          <div class="poll-row"><span class="party-name">ACT</span><div class="track"><div class="fill" style="width:28.6%;background:#d8a22e"></div></div><span class="poll-value">10.0%</span></div>
+          <div class="poll-row"><span class="party-name">NZ First</span><div class="track"><div class="fill" style="width:24%;background:#6f7e8b"></div></div><span class="poll-value">8.4%</span></div>
+          <div class="poll-row"><span class="party-name">Opportunity</span><div class="track"><div class="fill" style="width:17.7%;background:#8061a6"></div></div><span class="poll-value">6.2%</span></div>
+          <div class="poll-row"><span class="party-name">Te Pāti Māori</span><div class="track"><div class="fill" style="width:1.15%;background:#986a46"></div></div><span class="poll-value">0.4%</span></div>
+        </div>
+        <div class="poll-note"><strong>How to read this:</strong> these are national Party Vote estimates, not electorate-level results. The map deliberately does not project national percentages onto individual electorates. National (29.5%) and Labour (28.8%) are separated by less than the poll’s stated sampling error.</div>
+        <p class="methodology">Sample: 1,006 eligible voters (500 mobile phone; 506 online panel). Approximate maximum sampling error ±3.1 percentage points at 95% confidence. Undecided voters, non-voters and refusals are excluded from party support. A poll is a snapshot, not a prediction.</p>
+      </section>
+
+      <section class="panel-card">
+        <div class="section-head"><div class="section-title">Electoral participation</div><span class="tag">Official figures</span></div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-value" style="font-size:19px">3,790,946</div><div class="metric-label">People enrolled to vote</div><div class="metric-note">30 Oct · provisional</div></div>
+          <div class="metric"><div class="metric-value">93.6%</div><div class="metric-label">Provisional enrolment rate</div><div class="metric-note">All eligible voters</div></div>
+          <div class="metric"><div class="metric-value" style="font-size:19px">1,074,416</div><div class="metric-label">Advance votes cast</div><div class="metric-note">Cumulative to 2 Nov</div></div>
+          <div class="metric"><div class="metric-value">603,968</div><div class="metric-label">Enrolled voters of Māori descent</div><div class="metric-note">30 Oct · provisional</div></div>
+        </div>
+        <div class="roll-title">Māori voters by electoral roll</div>
+        <div class="roll-bar" aria-label="54.9 percent on the Māori roll and 45.1 percent on the General roll"><div class="maori" style="width:54.9%"></div><div class="general" style="width:45.1%"></div></div>
+        <div class="roll-legend"><span><i class="swatch" style="background:var(--ochre);vertical-align:-2px"></i> <b>54.9%</b> Māori roll · 331,455</span><span><i class="swatch" style="background:var(--teal);vertical-align:-2px"></i> <b>45.1%</b> General roll · 272,513</span></div>
+        <p class="methodology">Advance-vote figures are informal daily returns from voting places, exclude overseas votes and may be revised. They are not official election results.</p>
+      </section>
+
+      <section class="panel-card">
+        <div class="section-head"><div class="section-title">Election timetable</div><span class="tag">2026</span></div>
+        <ul class="timeline">
+          <li><span class="date">26 OCT</span><span><strong>Advance voting opens</strong> across New Zealand.</span></li>
+          <li><span class="date">06 NOV</span><span><strong>Advance voting ends</strong>; regulated campaign period ends at midnight.</span></li>
+          <li><span class="date">07 NOV</span><span><strong>Election Day</strong> · voting places open 9:00 am–7:00 pm. Preliminary results released progressively from 7:00 pm.</span></li>
+          <li><span class="date">27 NOV</span><span><strong>Official results</strong> expected to be declared.</span></li>
+        </ul>
+      </section>
+
+      <section class="panel-card full">
+        <div class="section-head"><div class="section-title">Map notes &amp; sources</div><span class="tag">Method</span></div>
+        <div class="notes-text">The 2026 election uses <strong>64 General electorates and 7 Māori electorates</strong>. Every location is covered by both a General electorate and a Māori electorate; electors vote on the roll on which they are enrolled. Toggle the boundary layer to avoid overlaying the two systems.</div>
+        <div class="sources">
+          <a href="https://vote.nz/enrolling/get-ready-to-enrol/find-your-electorate-on-a-map" target="_blank" rel="noopener">Vote NZ — Find your 2026 electorate</a>
+          <a href="https://elections.nz/democracy-in-nz/historical-events/boundary-review-2025/report-of-the-representation-commission-2025" target="_blank" rel="noopener">Representation Commission — 2025 boundary review</a>
+          <a href="https://services2.arcgis.com/vKb0s8tBIA3bdocZ/ArcGIS/rest/services/General_Electorates_2025/FeatureServer/0" target="_blank" rel="noopener">Stats NZ / Representation Commission — 64 General electorate polygons</a>
+          <a href="https://services2.arcgis.com/vKb0s8tBIA3bdocZ/arcgis/rest/services/M%C4%81ori_Electorates_2025/FeatureServer/0" target="_blank" rel="noopener">Stats NZ / Representation Commission — 7 Māori electorate polygons</a>
+          <a href="https://www.1news.co.nz/2026/11/03/final-poll-election-set-to-go-down-to-wire-as-nationals-partners-slip/" target="_blank" rel="noopener">1News / Verian — Final poll, 3 November 2026</a>
+          <a href="https://elections.nz/media-and-news/2026/nearly-3-8m-people-enrolled-to-vote" target="_blank" rel="noopener">Electoral Commission — Enrolment statistics, 30 October 2026</a>
+          <a href="https://vote.nz/2026-general-election/about/overview/voting-statistics" target="_blank" rel="noopener">Vote NZ — Advance voting statistics</a>
+          <a href="https://elections.nz/media-and-news/2026/key-dates-for-2026-general-election" target="_blank" rel="noopener">Electoral Commission — Key election dates</a>
+        </div>
+        <p class="methodology">Boundary geometry: Representation Commission / Stats NZ, 2025 General Electorates and Māori Electorates datasets (the boundaries used for the 2026 General Election). Displayed through ArcGIS Feature Services. Basemap: Esri, HERE, Garmin, OpenStreetMap contributors. This is a pre-election reference map; no 2026 electorate winners or official results are shown.</p>
+      </section>
+    </aside>
+  </main>
+  <footer class="footnote">Designed as an interactive thematic reference map · Snapshot date: 3 November 2026 · English-language map labels and interface</footer>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(() => {
+  'use strict';
+  const GENERAL_QUERY = 'https://services2.arcgis.com/vKb0s8tBIA3bdocZ/ArcGIS/rest/services/General_Electorates_2025/FeatureServer/0/query';
+  const MAORI_QUERY = 'https://services2.arcgis.com/vKb0s8tBIA3bdocZ/ArcGIS/rest/services/M%C4%81ori_Electorates_2025/FeatureServer/0/query';
+  const generalField = 'GED2025_V1_00_NAME';
+  const maoriField = 'MED2025_V1_00_NAME';
+  const loading = document.getElementById('loading');
+  const status = document.getElementById('mapStatus');
+  const search = document.getElementById('searchElectorate');
+  const options = document.getElementById('electorateOptions');
+  const generalBtn = document.getElementById('generalBtn');
+  const maoriBtn = document.getElementById('maoriBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const themeToggle = document.getElementById('themeToggle');
+  const themeIcon = document.getElementById('themeIcon');
+  const themeLabel = document.getElementById('themeLabel');
+  const root = document.documentElement;
+
+  const map = L.map('map', { zoomControl: true, scrollWheelZoom: true, preferCanvas: true }).setView([-41.5, 173.3], 5);
+
+  // Basemaps without API key / watermark (Esri Canvas gray, light and dark)
+  const ESRI_ATTR = 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+  const baseLayers = {
+    light: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', { maxZoom: 16, maxNativeZoom: 16, attribution: ESRI_ATTR }),
+    dark: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', { maxZoom: 16, maxNativeZoom: 16, attribution: ESRI_ATTR })
+  };
+
+  const initialBounds = L.latLngBounds([[-47.7, 165.3], [-33.5, 179.8]]);
+  const styles = {
+    light: {
+      general: { color: '#15545e', weight: 1.15, opacity: .9, fillColor: '#237b83', fillOpacity: .23 },
+      maori:   { color: '#81541d', weight: 1.35, opacity: .95, fillColor: '#c58a38', fillOpacity: .28 },
+      hover:   { weight: 2.2, color: '#183448', fillOpacity: .43 }
+    },
+    dark: {
+      general: { color: '#62bcc6', weight: 1.15, opacity: .95, fillColor: '#2fa3ad', fillOpacity: .26 },
+      maori:   { color: '#e3b068', weight: 1.35, opacity: .95, fillColor: '#d9a050', fillOpacity: .30 },
+      hover:   { weight: 2.2, color: '#ffffff', fillOpacity: .45 }
+    }
+  };
+  let theme = root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  let generalLayer = null;
+  let maoriLayer = null;
+  let activeLayer = 'general';
+  let generalData = null;
+  let maoriData = null;
+  let allFeatures = [];
+
+  function baseStyle(type) { return styles[theme][type]; }
+
+  function applyTheme(next, persist) {
+    theme = next;
+    root.setAttribute('data-theme', theme);
+    if (persist) { try { localStorage.setItem('nz-theme', theme); } catch (e) {} }
+    const isDark = theme === 'dark';
+    themeIcon.textContent = isDark ? '☀' : '☾';
+    themeLabel.textContent = isDark ? 'Light mode' : 'Dark mode';
+    themeToggle.setAttribute('aria-pressed', String(isDark));
+    if (map.hasLayer(baseLayers[isDark ? 'light' : 'dark'])) map.removeLayer(baseLayers[isDark ? 'light' : 'dark']);
+    if (!map.hasLayer(baseLayers[theme])) baseLayers[theme].addTo(map).bringToBack();
+    if (generalLayer) generalLayer.setStyle(baseStyle('general'));
+    if (maoriLayer) maoriLayer.setStyle(baseStyle('maori'));
+  }
+  themeToggle.addEventListener('click', () => applyTheme(theme === 'dark' ? 'light' : 'dark', true));
+  if (window.matchMedia) {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = e => {
+      let saved = null;
+      try { saved = localStorage.getItem('nz-theme'); } catch (err) {}
+      if (!saved) applyTheme(e.matches ? 'dark' : 'light', false);
+    };
+    if (mq.addEventListener) mq.addEventListener('change', onChange);
+  }
+  applyTheme(theme, false);
+
+  function buildQueryUrl(base, field) {
+    const params = new URLSearchParams({
+      where: '1=1',
+      outFields: field,
+      returnGeometry: 'true',
+      outSR: '4326',
+      f: 'geojson',
+      geometryPrecision: '4'
+    });
+    return base + '?' + params.toString();
+  }
+
+  async function fetchGeoJson(base, field, label) {
+    const response = await fetch(buildQueryUrl(base, field), { method: 'GET', mode: 'cors' });
+    if (!response.ok) throw new Error(label + ' boundary service returned HTTP ' + response.status);
+    const data = await response.json();
+    if (!data || data.type !== 'FeatureCollection' || !Array.isArray(data.features)) {
+      const msg = data && data.error && data.error.message ? data.error.message : 'Unexpected response format';
+      throw new Error(label + ' boundary data: ' + msg);
+    }
+    return data;
+  }
+
+  function getName(feature, type) {
+    const p = feature.properties || {};
+    return p[type === 'general' ? generalField : maoriField] || p.NAME || p.name || 'Unnamed electorate';
+  }
+
+  function popupContent(name, type) {
+    const typeLabel = type === 'general' ? 'General electorate · General roll' : 'Māori electorate · Māori roll';
+    return `<div class="popup-title">${escapeHtml(name)}</div><div class="popup-type">${typeLabel}</div><div class="popup-note">Official 2025 boundary used for the 2026 General Election. No electorate-level poll estimate or election result is assigned to this area.</div>`;
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+
+  function makeLayer(data, type) {
+    return L.geoJSON(data, {
+      style: () => ({ ...baseStyle(type) }),
+      onEachFeature: (feature, layer) => {
+        const name = getName(feature, type);
+        layer.bindPopup(popupContent(name, type), { maxWidth: 260 });
+        layer.bindTooltip(escapeHtml(name), { sticky: true, direction: 'auto', opacity: .95 });
+        layer.on({
+          mouseover: e => e.target.setStyle(styles[theme].hover),
+          mouseout: e => e.target.setStyle(baseStyle(type))
+        });
+      }
+    });
+  }
+
+  function populateSearch() {
+    options.innerHTML = '';
+    allFeatures.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.name;
+      opt.label = item.type === 'general' ? 'General electorate' : 'Māori electorate';
+      options.appendChild(opt);
+    });
+  }
+
+  function setActive(type) {
+    activeLayer = type;
+    if (map.hasLayer(generalLayer)) map.removeLayer(generalLayer);
+    if (map.hasLayer(maoriLayer)) map.removeLayer(maoriLayer);
+    const layer = type === 'general' ? generalLayer : maoriLayer;
+    layer.addTo(map);
+    generalBtn.classList.toggle('active', type === 'general');
+    maoriBtn.classList.toggle('active', type === 'maori');
+    generalBtn.setAttribute('aria-pressed', String(type === 'general'));
+    maoriBtn.setAttribute('aria-pressed', String(type === 'maori'));
+    document.getElementById('mapLegend').innerHTML = type === 'general'
+      ? '<span class="legend-item"><i class="swatch general"></i> 64 General electorates · General roll</span>'
+      : '<span class="legend-item"><i class="swatch maori"></i> 7 Māori electorates · Māori roll</span>';
+    status.textContent = type === 'general' ? '64 official General electorate polygons' : '7 official Māori electorate polygons';
+  }
+
+  function findFeature(name, preferredType) {
+    const normalized = name.trim().toLocaleLowerCase();
+    if (!normalized) return null;
+    const matches = allFeatures.filter(f => f.name.toLocaleLowerCase() === normalized || f.name.toLocaleLowerCase().includes(normalized));
+    return matches.find(f => f.type === preferredType) || matches[0] || null;
+  }
+
+  function zoomToFeature(item) {
+    if (!item) return;
+    setActive(item.type);
+    const targetLayer = item.type === 'general' ? generalLayer : maoriLayer;
+    targetLayer.eachLayer(layer => {
+      if (getName(layer.feature, item.type) === item.name) {
+        const bounds = layer.getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [28, 28], maxZoom: 9 });
+          setTimeout(() => layer.openPopup(), 350);
+        }
+      }
+    });
+  }
+
+  generalBtn.addEventListener('click', () => setActive('general'));
+  maoriBtn.addEventListener('click', () => setActive('maori'));
+  resetBtn.addEventListener('click', () => { search.value = ''; setActive(activeLayer); map.fitBounds(initialBounds, { padding: [10, 10] }); });
+  search.addEventListener('change', () => {
+    const item = findFeature(search.value, activeLayer);
+    if (item) { search.value = item.name; zoomToFeature(item); }
+  });
+  search.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const item = findFeature(search.value, activeLayer);
+      if (item) { search.value = item.name; zoomToFeature(item); }
+      else { search.setCustomValidity('No matching electorate found.'); search.reportValidity(); }
+    }
+  });
+  window.addEventListener('resize', () => map.invalidateSize());
+
+  async function init() {
+    try {
+      const [g, m] = await Promise.all([
+        fetchGeoJson(GENERAL_QUERY, generalField, 'General electorates'),
+        fetchGeoJson(MAORI_QUERY, maoriField, 'Māori electorates')
+      ]);
+      generalData = g; maoriData = m;
+      generalLayer = makeLayer(generalData, 'general');
+      maoriLayer = makeLayer(maoriData, 'maori');
+      allFeatures = [
+        ...g.features.map(f => ({ feature:f, name:getName(f,'general'), type:'general' })),
+        ...m.features.map(f => ({ feature:f, name:getName(f,'maori'), type:'maori' }))
+      ];
+      populateSearch();
+      setActive('general');
+      map.fitBounds(initialBounds, { padding: [10, 10] });
+      loading.style.display = 'none';
+      if (g.features.length !== 64 || m.features.length !== 7) {
+        status.textContent = `Loaded ${g.features.length} General and ${m.features.length} Māori polygons (expected 64 + 7)`;
+      }
+    } catch (error) {
+      loading.innerHTML = 'The official boundary service could not be reached.<small>' + escapeHtml(error.message) + '<br><br>Check your internet connection and reload this page. The polling and participation panels remain available.</small>';
+      status.textContent = 'Boundary data unavailable — statistics are still displayed';
+      console.error(error);
+    }
+  }
+  init();
+})();
+</script>
+</body>
+</html>
